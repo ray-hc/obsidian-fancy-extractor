@@ -1,6 +1,6 @@
 {
-	"name": "extract-note-to-subdir-obsidian-plugin",
-	"version": "1.0.2",
+	"name": "obsplugin-extract-note-to-subdir",
+	"version": "1.0.4",
 	"description": "Plugin for extracting notes to custom subfolder in Obsidian (https://obsidian.md)",
 	"main": "main.js",
 	"scripts": {
