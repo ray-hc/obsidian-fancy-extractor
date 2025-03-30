@@ -1,4 +1,4 @@
-# Extract to Subdirectory Plugin for Obsidian
+# Extract Note to Subfolder Plugin for Obsidian
 
 This Obsidian plugin allows you to extract notes to a subdirectory of the current folder, similiar to how attachments can be created.
 
