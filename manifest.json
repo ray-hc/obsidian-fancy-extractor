@@ -1,9 +1,9 @@
 {
-	"id": "extract-subdir-plugin",
-	"name": "Extract To Subdirectory",
-	"version": "1.0.0",
+	"id": "extract-note-to-subdir",
+	"name": "Extract Note To Subfolder",
+	"version": "1.0.2",
 	"minAppVersion": "0.15.0",
-	"description": "Plugin which allows for extracted notes to be created in their own directory, like attachments.",
+	"description": "Plugin which allows for extracted notes to be created in their own subfolder, like attachments.",
 	"author": "ray-hc",
 	"authorUrl": "https://www.raycrist.com",
 	"isDesktopOnly": false

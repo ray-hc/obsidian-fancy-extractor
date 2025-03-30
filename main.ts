@@ -181,7 +181,7 @@ export class ExtractSubdirSettingTab extends PluginSettingTab {
       );
     new Setting(containerEl)
     .setName("First N Words")
-    .setDesc("Number of words copied from selected text to name. To disable, enter '0'.")
+    .setDesc("Number of words copied from selected text to name. To disable, use '0'.")
     .addText(text => 
         text
             .setPlaceholder("Enter a number")
