@@ -1,8 +1,8 @@
-import { Plugin, Notice, Modal, App, MarkdownView, Editor, TFile, moment, PluginSettingTab, Setting } from 'obsidian';
+import { Plugin, Notice, Modal, App, MarkdownView, Editor, TFile, PluginSettingTab, Setting, normalizePath, moment } from 'obsidian';
 import { removeStopwords } from "stopword";
 
-export default class ExtractToSubdirPlugin extends Plugin {
-  settings: ExtractSubdirSettings;
+export default class FancyExtractPlugin extends Plugin {
+  settings: FancyExtractSettings;
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -14,16 +14,20 @@ export default class ExtractToSubdirPlugin extends Plugin {
 
 	async onload() {
     await this.loadSettings();
-    this.addSettingTab(new ExtractSubdirSettingTab(this.app, this));
+    this.addSettingTab(new FancyExtractSettingTab(this.app, this));
 		this.addCommand({
-			id: 'extract-to-subdir',
-			name: 'Extract to note in subdirectory',
-			editorCallback: (editor, view: MarkdownView) => this.extractText(editor, view)
+			id: 'fancy-extract-open-modal',
+			name: 'Extract (Open Name Modal)',
+			editorCallback: (editor, view: MarkdownView) => this.extractText(editor, view, true)
+		});
+    this.addCommand({
+			id: 'fancy-extract-use-default',
+			name: 'Extract (Use Default Name)',
+			editorCallback: (editor, view: MarkdownView) => this.extractText(editor, view, false)
 		});
 	}
 
-
-	async extractText(editor: Editor, view: MarkdownView) {
+	async extractText(editor: Editor, view: MarkdownView, openModal: boolean) {
 		const selectedText = editor.getSelection().trim();
 		if (!selectedText) {
 			new Notice('No text selected to extract.');
@@ -34,42 +38,75 @@ export default class ExtractToSubdirPlugin extends Plugin {
       new Notice("Couldn't determine current file.");
       return;
     }
-    const defaultName = getNoteName(selectedText, this.settings.defaultPrefix, this.settings.firstNWords, this.settings.customStopwords);
+    const defaultName = getDefaultName(selectedText, this.settings);
 
-		new ExtractModal(this.app, defaultName, async (noteName) => {
-      // Create extracts folder if none exist.
-			const parentFolder = currentFile.parent?.path || '/';
-      const extractsFolderPath = `${parentFolder}/${this.settings.subdir}`;
-			await this.app.vault.createFolder(extractsFolderPath).catch(() => {});
+    async function createExtract(currentFile: TFile, noteName: string, app: App, settings: FancyExtractSettings): Promise<void> {
+			console.log(this);
+      // First, new note will be placed in current folder.
+      // If not final location, will append unique ID to ensure no naming conflicts.
+      const currentFolder = currentFile.parent?.path || '/';
+      const uniqueID = settings.useSubdir ? getUniqueID() : "";
 
-      // Create child note in current directory first, using current time to provide unique identifier.
-      const initialFilePath = `${parentFolder}/${noteName}-${moment().format("YYYYMMDDHHmm")}.md`;
-			const note: TFile = await this.app.vault.create(initialFilePath, selectedText);
+      // Place new note.
+      const fp = normalizePath(`${currentFolder}/${noteName}${uniqueID}.md`);
+			const note: TFile = await app.vault.create(fp, selectedText);
 
-      // Move child note into extracts folder. 
-      // By moving the file via fileManager, Obsidian will automatically update links included in extractedText.
-			const newFilePath = `${extractsFolderPath}/${noteName}.md`;
-      await this.app.fileManager.renameFile(note, newFilePath).catch(
-        () => {
-          new Notice("Couldn't move new file into subdirectory.");
-        }
-      );
-
+      // If using subfolder, move file there. 
+      // By switching folders as secondary step, ensures Obsidian will update links.
+      if (settings.useSubdir) {
+        const subdir = `${currentFolder}/${replaceDatePlaceholder(settings.subdir)}`;
+        await app.vault.createFolder(subdir).catch(() => {});
+        const newFp = normalizePath(`${subdir}/${noteName}.md`);
+        await app.fileManager.renameFile(note, newFp).catch(
+          () => {
+            new Notice(`Couldn't move new file into ${subdir}.`);
+          }
+        );
+      }
       // Update original note with link.
-      const linkToNote = this.app.fileManager.generateMarkdownLink(note, currentFile.path);
-      editor.replaceSelection(`!${linkToNote}`);
+      const linkToNote = app.fileManager.generateMarkdownLink(note, currentFile.path);
 
+      if (settings.textAfterExtraction == "embed") {
+        editor.replaceSelection(`!${linkToNote}`);
+      } else if (settings.textAfterExtraction == "link"){
+        editor.replaceSelection(`${linkToNote}`);
+      } else {
+        editor.replaceSelection("");
+      }
+      
       // Notify user.
 			new Notice(`Extracted text to ${note.path}`);
-		}).open();
+    }
+
+    if (openModal) {
+      new ExtractModal(this.app, defaultName, (noteName) => createExtract(currentFile, noteName, this.app, this.settings)).open();
+    } else {
+      createExtract(currentFile, defaultName, this.app, this.settings);
+    }
 	}
 }
 
-export function getNoteName(text: string, prefix: string, firstNWords: number, customStopwords: string) {
-  const firstBlock = text.split("\n\n")[0];
+export function getDefaultName(selectedText: string, settings: FancyExtractSettings) {
+  const noteName = getFormatWithNWords(selectedText, settings);
+  return replaceDatePlaceholder(noteName);
+}
+
+// Calculate the {nWords} variable value and return settings.format with "{nWords}" replaced by value.
+function getFormatWithNWords(selectedText: string, settings: FancyExtractSettings): string {
+  const firstBlock = selectedText.split("\n\n")[0];
   const words = firstBlock.toLowerCase().replace(/[^a-z\s]/g, "").match(/\b\w+\b/g) || [];
-  const kw = (customStopwords == "") ? removeStopwords(words) : removeStopwords(words, customStopwords.split(" "))
-  return `${prefix}${kw.slice(0, firstNWords).join("-")}`;
+  const kw = (settings.customStopwords == "") ? removeStopwords(words) : removeStopwords(words, settings.customStopwords.split(" "))
+  const firstNWords = kw.slice(0, settings.nWords).join("-");
+  return settings.format.replace(/\{nWords\}/g, firstNWords);
+}
+
+
+function replaceDatePlaceholder(str: string): string {
+  return str.replace(/\{DATE:([^}]+)\}/g, (_, format) => moment().format(format));
+}
+
+function getUniqueID(): string {
+  return Math.random().toString(36).substring(2, 7);
 }
 
 class ExtractModal extends Modal {
@@ -111,26 +148,28 @@ class ExtractModal extends Modal {
   }
 }
 
-interface ExtractSubdirSettings {
+interface FancyExtractSettings {
   textAfterExtraction: string;
   subdir: string;
-  defaultPrefix: string;
-  firstNWords: number;
+  useSubdir: boolean;
+  format: string;
+  nWords: number;
   customStopwords: string;
 }
 
-const DEFAULT_SETTINGS: ExtractSubdirSettings = {
+const DEFAULT_SETTINGS: FancyExtractSettings = {
   textAfterExtraction: "embed",
-  subdir: "notes",
-  defaultPrefix: "",
+  subdir: "extracts",
+  useSubdir: true,
+  format: "{DATE:YYYY-MM-DD}_{nWords}",
   customStopwords: "",
-  firstNWords: 5,
+  nWords: 5,
 }
 
-export class ExtractSubdirSettingTab extends PluginSettingTab {
-  plugin: ExtractToSubdirPlugin;
+export class FancyExtractSettingTab extends PluginSettingTab {
+  plugin: FancyExtractPlugin;
 
-  constructor(app: App, plugin: ExtractToSubdirPlugin) {
+  constructor(app: App, plugin: FancyExtractPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -138,15 +177,25 @@ export class ExtractSubdirSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", {text: "General Settings"});
     new Setting(containerEl)
       .setName('Subfolder Name')
-      .setDesc('Name of folder to place extracted notes.')
+      .setDesc('Name of folder to place extracted notes. May include multiple layers of folders. May use {DATE:format} where format is a valid Moment format.')
       .addText((text) =>
         text
           .setValue(this.plugin.settings.subdir)
           .onChange(async (value) => {
             this.plugin.settings.subdir = value;
+            await this.plugin.saveSettings();
+          })
+      );
+    new Setting(containerEl)
+      .setName('Use Subfolder')
+      .setDesc('If false, notes will be extracted to current folder.')
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.useSubdir)
+          .onChange(async (value) => {
+            this.plugin.settings.useSubdir = value;
             await this.plugin.saveSettings();
           })
       );
@@ -166,39 +215,38 @@ export class ExtractSubdirSettingTab extends PluginSettingTab {
                 await this.plugin.saveSettings();
             })
     );
-    containerEl.createEl("h2", {text: "Default Name Settings"});
-    containerEl.createEl("p", {text: "The selected text's first block's first N words are used as the default note name. This plugin uses the `stopword` npm module to filter out English stopwords (very common words like 'the' or 'of') from the name."})
+    new Setting(containerEl).setName('Default Note Name').setHeading();
     new Setting(containerEl)
-      .setName('Prefix')
-      .setDesc('String to start name.')
+      .setName('Format')
+      .setDesc('Format for new file names. Available variables are {nWords}, the first N words of the selected text\'s first block, and {DATE:format}, where format is a valid Moment format.')
       .addText((text) =>
         text
-          .setValue(this.plugin.settings.defaultPrefix)
+          .setValue(this.plugin.settings.format)
           .onChange(async (value) => {
-            this.plugin.settings.defaultPrefix = value;
+            this.plugin.settings.format = value;
             await this.plugin.saveSettings();
           })
       );
     new Setting(containerEl)
     .setName("First N Words")
-    .setDesc("Number of words copied from selected text to name. To disable, use '0'.")
+    .setDesc("How many words to include in the {nWords} variable.")
     .addText(text => 
         text
-            .setPlaceholder("Enter a number")
-            .setValue(this.plugin.settings.firstNWords.toString())
+            .setPlaceholder("Enter a positive number")
+            .setValue(this.plugin.settings.nWords.toString())
             .onChange(async (value) => {
                 const numValue = parseInt(value, 10);
-                if (!isNaN(numValue) && numValue >= 0) {
-                    this.plugin.settings.firstNWords = numValue;
+                if (!isNaN(numValue) && numValue > 0) {
+                    this.plugin.settings.nWords = numValue;
                     await this.plugin.saveSettings();
                 } else {
-                  new Notice("Please enter a valid non-negative number.");
+                  new Notice("Please enter a positive integer.");
               }
             })
     );
     new Setting(containerEl)
       .setName('Custom Words to Filter')
-      .setDesc('Comma-seperated list of words to ignore when when copying words from selected text. If blank, default English stopwords are used.')
+      .setDesc('Space-seperated list of words to ignore when calculating the {nWords} variable. If blank, default English stopwords are used (as defined by npm `stopword` module).')
       .addText((text) =>
         text
           .setValue(this.plugin.settings.customStopwords)

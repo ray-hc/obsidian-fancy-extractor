@@ -1,7 +1,9 @@
-# Extract Note to Subfolder Plugin for Obsidian
+# Fancy Extracter Plugin for Obsidian
 
 This Obsidian plugin allows you to extract notes to a subdirectory of the current folder, similiar to how attachments can be created.
 
-(Extracted notes can only be extracted to the current folder, not a subfolder, via Obsidian's core plugin Note Composer.)
+For faster extraction, users may also define default name formats for new notes, using the first N words from the selected text as well as the date/time as variables.
 
-For faster extraction, a default note name is computed from the first N words of the selected text and a customizable prefix. This can be disabled.
+> This plugin uses npm's `stopword` module to strip very common English words like "the" or "and" from the first N words for the note name, as I've found this leads to more descriptive names. The list of stopwords can be customized.
+
+Limitation: I have no plans to support merging extracted notes or using templates for extracted notes (as I don't use these features!). If you'd like to build this feature, submit a PR!
