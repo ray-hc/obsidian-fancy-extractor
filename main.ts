@@ -41,7 +41,6 @@ export default class FancyExtractPlugin extends Plugin {
     const defaultName = getDefaultName(selectedText, this.settings);
 
     async function createExtract(currentFile: TFile, noteName: string, app: App, settings: FancyExtractSettings): Promise<void> {
-			console.log(this);
       // First, new note will be placed in current folder.
       // If not final location, will append unique ID to ensure no naming conflicts.
       const currentFolder = currentFile.parent?.path || '/';

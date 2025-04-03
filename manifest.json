@@ -1,6 +1,6 @@
 {
-	"id": "fancy-extracter",
-	"name": "Fancy Note Extracter",
+	"id": "fancy-extractor",
+	"name": "Fancy Note Extractor",
 	"version": "1.1.0",
 	"minAppVersion": "0.15.0",
 	"description": "Plugin which allows users to extract notes to subfolders and use auto-generated names.",

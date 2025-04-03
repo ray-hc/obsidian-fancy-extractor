@@ -1,4 +1,4 @@
-# Fancy Extracter Plugin for Obsidian
+# Fancy Extractor Plugin for Obsidian
 
 This Obsidian plugin allows you to extract notes to a subdirectory of the current folder, similiar to how attachments can be created.
 
