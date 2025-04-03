@@ -15,5 +15,5 @@ Using Settings:
 * format=`extract_{nWords}`
 * nWords=5.
 
-https://github.com/user-attachments/assets/bbe6aca4-f054-42aa-a8ee-22834df84140
+https://github.com/user-attachments/assets/c585aecc-d322-406f-9427-052db2cd20b5
 
