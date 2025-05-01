@@ -11,9 +11,9 @@ Limitation: I have no plans to support merging extracted notes or using template
 ## Demo
 
 Using Settings: 
-* subfolder=`extracts/{DATE:YYYY-MM-DD}/`
-* format=`extract_{nWords}`
-* nWords=5.
+
+* *Relative path to extracts folder:* `extracts/{DATE:YYYY-MM-DD}/`
+* *format:* `extract_{WORDS:3}`
 
 https://github.com/user-attachments/assets/c585aecc-d322-406f-9427-052db2cd20b5
 
