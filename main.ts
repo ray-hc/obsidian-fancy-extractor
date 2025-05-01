@@ -12,77 +12,86 @@ export default class FancyExtractPlugin extends Plugin {
     await this.saveData(this.settings);
   }
 
+
+
 	async onload() {
     await this.loadSettings();
     this.addSettingTab(new FancyExtractSettingTab(this.app, this));
 		this.addCommand({
-			id: 'fancy-extract-open-modal',
+			id: 'open-name-modal',
 			name: 'Extract (Open Name Modal)',
-			editorCallback: (editor, view: MarkdownView) => this.extractText(editor, view, true)
+			editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
+        this.checkAndExtractText(checking, editor, view, true)
+      }
 		});
     this.addCommand({
-			id: 'fancy-extract-use-default',
+			id: 'use-default-name',
 			name: 'Extract (Use Default Name)',
-			editorCallback: (editor, view: MarkdownView) => this.extractText(editor, view, false)
+			editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
+        this.checkAndExtractText(checking, editor, view, false)
+      }
 		});
 	}
 
-	async extractText(editor: Editor, view: MarkdownView, openModal: boolean) {
-		const selectedText = editor.getSelection().trim();
-		if (!selectedText) {
-			new Notice('No text selected to extract.');
-			return;
-		}			
-    const currentFile = view.file;
-    if (!currentFile) {
-      new Notice("Couldn't determine current file.");
-      return;
+  async checkAndExtractText(checking: boolean, editor: Editor, view: MarkdownView, openModal: boolean) {
+    const selectedText = editor.getSelection().trim();
+    const currFile = view.file;
+    if (selectedText && currFile) {
+      if (!checking) {
+        this.extractText(editor, view, openModal, selectedText, currFile);
+      }
+      return true;
     }
+    return false;
+  }
+
+	async extractText(editor: Editor, view: MarkdownView, openModal: boolean, selectedText: string, currFile: TFile) {
     const defaultName = getDefaultName(selectedText, this.settings);
-
-    async function createExtract(currentFile: TFile, noteName: string, app: App, settings: FancyExtractSettings): Promise<void> {
-      // First, new note will be placed in current folder.
-      // If not final location, will append unique ID to ensure no naming conflicts.
-      const currentFolder = currentFile.parent?.path || '/';
-      const uniqueID = settings.useSubdir ? getUniqueID() : "";
-
-      // Place new note.
-      const fp = normalizePath(`${currentFolder}/${noteName}${uniqueID}.md`);
-			const note: TFile = await app.vault.create(fp, selectedText);
-
-      // If using subfolder, move file there. 
-      // By switching folders as secondary step, ensures Obsidian will update links.
-      if (settings.useSubdir) {
-        const subdir = `${currentFolder}/${replaceDatePlaceholder(settings.subdir)}`;
-        await app.vault.createFolder(subdir).catch(() => {});
-        const newFp = normalizePath(`${subdir}/${noteName}.md`);
-        await app.fileManager.renameFile(note, newFp).catch(
-          () => {
-            new Notice(`Couldn't move new file into ${subdir}.`);
-          }
-        );
-      }
-      // Update original note with link.
-      const linkToNote = app.fileManager.generateMarkdownLink(note, currentFile.path);
-
-      if (settings.textAfterExtraction == "embed") {
-        editor.replaceSelection(`!${linkToNote}`);
-      } else if (settings.textAfterExtraction == "link"){
-        editor.replaceSelection(`${linkToNote}`);
-      } else {
-        editor.replaceSelection("");
-      }
-      
-      // Notify user.
-			new Notice(`Extracted text to ${note.path}`);
-    }
-
     if (openModal) {
-      new ExtractModal(this.app, defaultName, (noteName) => createExtract(currentFile, noteName, this.app, this.settings)).open();
+      // Open modal, which will name extract on callback.
+      new ExtractModal(this.app, defaultName, (noteName) => this.createExtract(editor, selectedText, currFile, noteName)).open();
     } else {
-      createExtract(currentFile, defaultName, this.app, this.settings);
+      // If use default, call createExtract now.
+      this.createExtract(editor, selectedText, currFile, defaultName);
     }
 	}
+
+  async createExtract(editor: Editor, selectedText: string, currFile: TFile, noteName: string): Promise<void> {
+    // First, new note will be placed in current folder.
+    // If not final location, will append unique ID to ensure no naming conflicts.
+    const currentFolder = currFile.parent?.path || '/';
+    const uniqueID = this.settings.extractFolder != "" ? getUniqueID() : "";
+
+    // Place new note.
+    const fp = normalizePath(`${currentFolder}/${noteName}${uniqueID}.md`);
+    const note: TFile = await this.app.vault.create(fp, selectedText);
+
+    // If using subfolder, move file there. 
+    // By switching folders as secondary step, ensures Obsidian will update links.
+    if (this.settings.extractFolder) {
+      const extractFolder = `${currentFolder}/${replaceDatePlaceholder(this.settings.extractFolder)}`;
+      await this.app.vault.createFolder(extractFolder).catch(() => {});
+      const newFp = normalizePath(`${extractFolder}/${noteName}.md`);
+      await this.app.fileManager.renameFile(note, newFp).catch(
+        () => {
+          new Notice(`Couldn't move new file into ${extractFolder}.`);
+        }
+      );
+    }
+    // Update original note with link.
+    const linkToNote = this.app.fileManager.generateMarkdownLink(note, currFile.path);
+
+    if (this.settings.textAfterExtraction == "embed") {
+      editor.replaceSelection(`!${linkToNote}`);
+    } else if (this.settings.textAfterExtraction == "link"){
+      editor.replaceSelection(`${linkToNote}`);
+    } else {
+      editor.replaceSelection("");
+    }
+    
+    // Notify user.
+    new Notice(`Extracted text to ${note.path}`);
+  }
 }
 
 export function getDefaultName(selectedText: string, settings: FancyExtractSettings) {
@@ -149,8 +158,7 @@ class ExtractModal extends Modal {
 
 interface FancyExtractSettings {
   textAfterExtraction: string;
-  subdir: string;
-  useSubdir: boolean;
+  extractFolder: string;
   format: string;
   nWords: number;
   customStopwords: string;
@@ -158,8 +166,7 @@ interface FancyExtractSettings {
 
 const DEFAULT_SETTINGS: FancyExtractSettings = {
   textAfterExtraction: "embed",
-  subdir: "extracts",
-  useSubdir: true,
+  extractFolder: "extracts",
   format: "{DATE:YYYY-MM-DD}_{nWords}",
   customStopwords: "",
   nWords: 5,
@@ -177,29 +184,18 @@ export class FancyExtractSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     new Setting(containerEl)
-      .setName('Subfolder Name')
-      .setDesc('Name of folder to place extracted notes. May include multiple layers of folders. May use {DATE:format} where format is a valid Moment format.')
+      .setName('Relative path to extracts folder')
+      .setDesc('May use {DATE:format} where format is a valid Moment format. Leave blank to place extracts in current folder.')
       .addText((text) =>
         text
-          .setValue(this.plugin.settings.subdir)
+          .setValue(this.plugin.settings.extractFolder)
           .onChange(async (value) => {
-            this.plugin.settings.subdir = value;
+            this.plugin.settings.extractFolder = value;
             await this.plugin.saveSettings();
           })
       );
     new Setting(containerEl)
-      .setName('Use Subfolder')
-      .setDesc('If false, notes will be extracted to current folder.')
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.useSubdir)
-          .onChange(async (value) => {
-            this.plugin.settings.useSubdir = value;
-            await this.plugin.saveSettings();
-          })
-      );
-    new Setting(containerEl)
-      .setName("Text After Extraction")
+      .setName("Text after extraction")
       .setDesc("What to show in place of selected text after extracting it.")
       .addDropdown(dropdown =>
         dropdown
@@ -214,7 +210,7 @@ export class FancyExtractSettingTab extends PluginSettingTab {
                 await this.plugin.saveSettings();
             })
     );
-    new Setting(containerEl).setName('Default Note Name').setHeading();
+    new Setting(containerEl).setName('Default note name').setHeading();
     new Setting(containerEl)
       .setName('Format')
       .setDesc('Format for new file names. Available variables are {nWords}, the first N words of the selected text\'s first block, and {DATE:format}, where format is a valid Moment format.')
@@ -227,7 +223,7 @@ export class FancyExtractSettingTab extends PluginSettingTab {
           })
       );
     new Setting(containerEl)
-    .setName("First N Words")
+    .setName("First N words")
     .setDesc("How many words to include in the {nWords} variable.")
     .addText(text => 
         text
@@ -244,7 +240,7 @@ export class FancyExtractSettingTab extends PluginSettingTab {
             })
     );
     new Setting(containerEl)
-      .setName('Custom Words to Filter')
+      .setName('Custom words to filter')
       .setDesc('Space-seperated list of words to ignore when calculating the {nWords} variable. If blank, default English stopwords are used (as defined by npm `stopword` module).')
       .addText((text) =>
         text
