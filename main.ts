@@ -99,13 +99,24 @@ export function getDefaultName(selectedText: string, settings: FancyExtractSetti
   return replaceDatePlaceholder(noteName);
 }
 
-// Calculate the {nWords} variable value and return settings.format with "{nWords}" replaced by value.
+// Calculate the {WORDS:N} variable value and return settings.format with "{WORDS:N}" replaced by value.
 function getFormatWithNWords(selectedText: string, settings: FancyExtractSettings): string {
   const firstBlock = selectedText.split("\n\n")[0];
   const words = firstBlock.toLowerCase().replace(/[^a-z\s]/g, "").match(/\b\w+\b/g) || [];
-  const kw = (settings.customStopwords == "") ? removeStopwords(words) : removeStopwords(words, settings.customStopwords.split(" "))
-  const firstNWords = kw.slice(0, settings.nWords).join("-");
-  return settings.format.replace(/\{nWords\}/g, firstNWords);
+  const kw = (settings.customStopwords == "")
+    ? removeStopwords(words)
+    : removeStopwords(words, settings.customStopwords.split(" "));
+
+  // Match only {nWords=number}
+  const nWordsPattern = /\{WORDS:(\d+)\}/g;
+
+  const format = settings.format.replace(nWordsPattern, (_, n) => {
+    const count = parseInt(n, 10);
+    const firstNWords = kw.slice(0, count).join("-");
+    return firstNWords;
+  });
+
+  return format;
 }
 
 
@@ -167,7 +178,7 @@ interface FancyExtractSettings {
 const DEFAULT_SETTINGS: FancyExtractSettings = {
   textAfterExtraction: "embed",
   extractFolder: "extracts",
-  format: "{DATE:YYYY-MM-DD}_{nWords}",
+  format: "{DATE:YYYY-MM-DD}_{WORDS:3}",
   customStopwords: "",
   nWords: 5,
 }
@@ -213,35 +224,22 @@ export class FancyExtractSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Default note name').setHeading();
     new Setting(containerEl)
       .setName('Format')
-      .setDesc('Format for new file names. Available variables are {nWords}, the first N words of the selected text\'s first block, and {DATE:format}, where format is a valid Moment format.')
+      .setDesc('Format for new file names. Use {WORDS:N} to insert the first N words of the selected text\'s first block. Use {DATE:format} to insert current date/time, where format is a valid Moment format.')
       .addText((text) =>
         text
           .setValue(this.plugin.settings.format)
           .onChange(async (value) => {
-            this.plugin.settings.format = value;
-            await this.plugin.saveSettings();
+            if (value == "") {
+              new Notice("Please enter a non-empty string for format.");
+            } else {
+              this.plugin.settings.format = value;
+              await this.plugin.saveSettings();
+            }
           })
       );
     new Setting(containerEl)
-    .setName("First N words")
-    .setDesc("How many words to include in the {nWords} variable.")
-    .addText(text => 
-        text
-            .setPlaceholder("Enter a positive number")
-            .setValue(this.plugin.settings.nWords.toString())
-            .onChange(async (value) => {
-                const numValue = parseInt(value, 10);
-                if (!isNaN(numValue) && numValue > 0) {
-                    this.plugin.settings.nWords = numValue;
-                    await this.plugin.saveSettings();
-                } else {
-                  new Notice("Please enter a positive integer.");
-              }
-            })
-    );
-    new Setting(containerEl)
       .setName('Custom words to filter')
-      .setDesc('Space-seperated list of words to ignore when calculating the {nWords} variable. If blank, default English stopwords are used (as defined by npm `stopword` module).')
+      .setDesc('Space-seperated list of words to ignore when calculating the WORDS variable. If blank, default English stopwords are used (as defined by npm `stopword` module).')
       .addText((text) =>
         text
           .setValue(this.plugin.settings.customStopwords)
