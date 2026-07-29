@@ -21,19 +21,19 @@ export default class FancyExtractPlugin extends Plugin {
 			id: 'open-name-modal',
 			name: 'Extract (Open Name Modal)',
 			editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
-        this.checkAndExtractText(checking, editor, view, true)
+        return this.checkAndExtractText(checking, editor, view, true)
       }
 		});
     this.addCommand({
 			id: 'use-default-name',
 			name: 'Extract (Use Default Name)',
 			editorCheckCallback: (checking: boolean, editor: Editor, view: MarkdownView) => {
-        this.checkAndExtractText(checking, editor, view, false)
+        return this.checkAndExtractText(checking, editor, view, false)
       }
 		});
 	}
 
-  async checkAndExtractText(checking: boolean, editor: Editor, view: MarkdownView, openModal: boolean) {
+  checkAndExtractText(checking: boolean, editor: Editor, view: MarkdownView, openModal: boolean): boolean {
     const selectedText = editor.getSelection().trim();
     const currFile = view.file;
     if (selectedText && currFile) {
@@ -115,7 +115,6 @@ function getFormatWithNWords(selectedText: string, settings: FancyExtractSetting
     const firstNWords = kw.slice(0, count).join("-");
     return firstNWords;
   });
-
   return format;
 }
 
